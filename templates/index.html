@@ -87,7 +87,7 @@ async function loadMarket(){
     if(!d || JSON.stringify(d)===marketCache) return;
     marketCache=JSON.stringify(d);
     const el=document.getElementById('market');
-    const idx=(d.indexes||[]).map(i=>`<div class="idx-card"><div style="font-size:.78rem;color:#8b949e">${i.name||'?'}</div><div class="ip">${(i.price||0).toLocaleString()}</div><div class="${(i.change_pct||0)>=0?'red':'green'}">${(i.change_pct||0)>=0?'+':''}${(i.change_pct||0).toFixed(2)}%</div></div>`).join('');
+    const idx=(d.indexes||[]).map(i=>{const nm={'SSE':'上证指数','SZSE':'深证成指','ChiNext':'创业板指'};const dn=nm[i.name]||i.name;return`<div class="idx-card"><div style="font-size:.78rem;color:#8b949e">${dn}</div><div class="ip">${(i.price||0).toLocaleString()}</div><div class="${(i.change_pct||0)>=0?'red':'green'}">${(i.change_pct||0)>=0?'+':''}${(i.change_pct||0).toFixed(2)}%</div></div>`}).join('');
     const t=(d.up_count||0)+(d.down_count||0)+(d.flat_count||0); const n=t||1;
     const up=((d.up_count||0)/n*100).toFixed(1), dn=((d.down_count||0)/n*100).toFixed(1), fl=((d.flat_count||0)/n*100).toFixed(1);
     const vol=(d.volume_top10||[]).map((v,i)=>`<tr><td>${i+1}</td><td>${v.code||''}</td><td>${v.name||''}</td><td class="${(v.change_pct||0)>=0?'red':'green'}">${(v.change_pct||0)>=0?'+':''}${(v.change_pct||0).toFixed(2)}%</td><td>${((v.volume||0)/10000).toFixed(0)}万手</td></tr>`).join('');

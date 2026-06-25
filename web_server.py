@@ -123,7 +123,7 @@ def _cache_market_snapshot(sel):
         # Index quotes
         idx = client.quotes(symbol=["999999", "399001", "399006"])
         indexes = []
-        nm = {"999999": "SSE", "399001": "SZSE", "399006": "ChiNext"}
+        nm = {"999999": "上证指数", "399001": "深证成指", "399006": "创业板指"}
         if idx is not None:
             for _, r in idx.iterrows():
                 c = str(r["code"]); p = float(r.get("price",0) or 0)
@@ -175,6 +175,6 @@ def _cache_market_snapshot(sel):
 # ===== Startup =====
 def start_server(host="0.0.0.0", port=5000, debug=False):
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
-    print(f"\n{'='*60}\n  A-Share Stock Selector\n  http://localhost:{port}\n{'='*60}\n")
+    print(f"\n{'='*60}\n  A股尾盘选股工具\n  http://localhost:{port}\n{'='*60}\n")
     threading.Thread(target=_run_selection, daemon=True).start()
     app.run(host=host, port=port, debug=debug, threaded=True)
