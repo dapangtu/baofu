@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>A-Share Stock Selector</title>
+<title>A股尾盘选股工具</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:#0f1117;color:#e1e4e8;min-height:100vh}
@@ -44,10 +44,10 @@ h2{font-size:.95rem;margin-bottom:12px;color:#8b949e}
 </head>
 <body>
 <header>
-  <div><h1>A-Share Stock Selector</h1></div>
+  <div><h1>A股尾盘选股工具</h1></div>
   <div style="display:flex;align-items:center;gap:12px">
-    <span class="sta" id="status">Connecting...</span>
-    <button onclick="refresh()" id="refresh-btn">Refresh</button>
+    <span class="sta" id="status">连接中...</span>
+    <button onclick="refresh()" id="refresh-btn">刷新</button>
   </div>
 </header>
 <main>
@@ -55,8 +55,8 @@ h2{font-size:.95rem;margin-bottom:12px;color:#8b949e}
     <div id="market"><div class="loading"><div class="spin"></div></div></div>
   </div>
   <div class="panel" id="recommend-panel">
-    <h2>Top Recommendations <span class="eta" id="rec-time"></span></h2>
-    <div id="recommend"><div class="loading"><div class="spin"></div><p>Running selection...</p></div></div>
+    <h2>个股推荐 <span class="eta" id="rec-time"></span></h2>
+    <div id="recommend"><div class="loading"><div class="spin"></div><p>正在选股分析...</p></div></div>
   </div>
 </main>
 <script>
@@ -64,14 +64,14 @@ let allStocks=[],selTime='';
 
 async function get(url){const r=await fetch(url);if(!r.ok)throw new Error(r.status);return r.json()}
 
-// ---- State polling ----
+// ---- 状态轮询 ----
 async function pollState(){
   try{
     const s=await get('/api/state');
-    document.getElementById('status').textContent=s.running?'Running...':(s.stock_count>0?'Ready':'Idle');
+    document.getElementById('status').textContent=s.running?'分析中...':(s.stock_count>0?'就绪':'空闲');
     if(!s.running && s.stock_count>0 && s.updated_at !== selTime){
       selTime=s.updated_at;
-      document.getElementById('rec-time').textContent=`(updated ${s.updated_at})`;
+      document.getElementById('rec-time').textContent=`(更新于 ${s.updated_at})`;
       loadRecommend();
     }
     if(!s.running && s.market_updated_at) loadMarket();
@@ -79,7 +79,7 @@ async function pollState(){
   setTimeout(pollState, 3000);
 }
 
-// ---- Market ----
+// ---- 大盘概况 ----
 let marketCache=null;
 async function loadMarket(){
   try{
@@ -90,35 +90,35 @@ async function loadMarket(){
     const idx=(d.indexes||[]).map(i=>`<div class="idx-card"><div style="font-size:.78rem;color:#8b949e">${i.name||'?'}</div><div class="ip">${(i.price||0).toLocaleString()}</div><div class="${(i.change_pct||0)>=0?'red':'green'}">${(i.change_pct||0)>=0?'+':''}${(i.change_pct||0).toFixed(2)}%</div></div>`).join('');
     const t=(d.up_count||0)+(d.down_count||0)+(d.flat_count||0); const n=t||1;
     const up=((d.up_count||0)/n*100).toFixed(1), dn=((d.down_count||0)/n*100).toFixed(1), fl=((d.flat_count||0)/n*100).toFixed(1);
-    const vol=(d.volume_top10||[]).map((v,i)=>`<tr><td>${i+1}</td><td>${v.code||''}</td><td>${v.name||''}</td><td class="${(v.change_pct||0)>=0?'red':'green'}">${(v.change_pct||0)>=0?'+':''}${(v.change_pct||0).toFixed(2)}%</td><td>${((v.volume||0)/10000).toFixed(0)}w</td></tr>`).join('');
-    el.innerHTML=`<h2>Market Overview <span class="eta">${d.updated_at||''}</span></h2><div class="idx-grid">${idx}</div><div><div style="display:flex;justify-content:space-between;font-size:.82rem"><span>Up/Down</span><span>${d.up_count||0} up / ${d.down_count||0} down</span></div><div class="bar"><span class="up" style="width:${up}%">${up}%</span><span class="flat" style="width:${fl}%"></span><span class="down" style="width:${dn}%">${dn}%</span></div></div><h2 style="margin-top:12px">Volume Top 10</h2><table class="tbl"><thead><tr><th>#</th><th>Code</th><th>Name</th><th>Chg%</th><th>Vol</th></tr></thead><tbody>${vol}</tbody></table>`;
+    const vol=(d.volume_top10||[]).map((v,i)=>`<tr><td>${i+1}</td><td>${v.code||''}</td><td>${v.name||''}</td><td class="${(v.change_pct||0)>=0?'red':'green'}">${(v.change_pct||0)>=0?'+':''}${(v.change_pct||0).toFixed(2)}%</td><td>${((v.volume||0)/10000).toFixed(0)}万手</td></tr>`).join('');
+    el.innerHTML=`<h2>大盘概况 <span class="eta">${d.updated_at||''}</span></h2><div class="idx-grid">${idx}</div><div><div style="display:flex;justify-content:space-between;font-size:.82rem"><span>涨跌分布</span><span>${d.up_count||0} 涨 / ${d.down_count||0} 跌</span></div><div class="bar"><span class="up" style="width:${up}%">${up}%</span><span class="flat" style="width:${fl}%"></span><span class="down" style="width:${dn}%">${dn}%</span></div></div><h2 style="margin-top:12px">成交量 Top 10</h2><table class="tbl"><thead><tr><th>#</th><th>代码</th><th>名称</th><th>涨跌</th><th>成交量</th></tr></thead><tbody>${vol}</tbody></table>`;
   }catch(e){}
 }
 
-// ---- Recommend ----
+// ---- 个股推荐 ----
 async function loadRecommend(){
   try{
     const d=await get('/api/recommend');
     allStocks=d.stocks||[];
     const el=document.getElementById('recommend');
     selTime=d.updated_at||'';
-    document.getElementById('rec-time').textContent=`(updated ${selTime})`;
-    if(!allStocks.length){el.innerHTML='<p style="color:#8b949e">No recommendations yet. Selection in progress...</p>';return}
+    document.getElementById('rec-time').textContent=`(更新于 ${selTime})`;
+    if(!allStocks.length){el.innerHTML='<p style="color:#8b949e">暂无推荐，选股分析进行中...</p>';return}
     el.innerHTML=allStocks.map(s=>{
-      const sigs=(s.indicators?.signal_summary||[]).map(t=>{const[n,dir]=t.split('=');return`<span class="tag ${dir}">${n}</span>`}).join('');
+      const sigs=(s.indicators?.signal_summary||[]).map(t=>{const[n,dir]=t.split('=');const label={'ma':'均线','macd':'MACD','kdj':'KDJ','boll':'布林','rsi':'RSI','volume_ratio':'量比'}[n]||n;return`<span class="tag ${dir}">${label}${dir==='bull'?'✓':'✗'}</span>`}).join('');
       const concepts=(s.hot_concepts||[]).slice(0,3).map(c=>`<span class="tag" style="background:#1c2d3e;color:#58a6ff">${c}</span>`).join('');
-      return`<div class="card"><div class="ch"><div><span class="rk">#${s.rank}</span> <span class="sym">${s.symbol} ${s.name}</span></div><span class="sc">${s.total_score.toFixed(1)}</span></div><div class="ps">Tech ${s.tech_score.toFixed(0)} | Money ${s.money_score.toFixed(0)} | Concept ${s.concept_score.toFixed(0)}</div><div class="tags">${sigs}</div><div class="tags">${concepts}</div><div class="st">${(s.detail_items||[]).slice(0,3).join(' | ')}</div></div>`;
+      return`<div class="card"><div class="ch"><div><span class="rk">#${s.rank}</span> <span class="sym">${s.symbol} ${s.name}</span></div><span class="sc">${s.total_score.toFixed(1)}分</span></div><div class="ps">技术 ${s.tech_score.toFixed(0)}分 | 资金 ${s.money_score.toFixed(0)}分 | 概念 ${s.concept_score.toFixed(0)}分</div><div class="tags">${sigs}</div><div class="tags">${concepts}</div><div class="st">${(s.detail_items||[]).slice(0,3).join(' | ')}</div></div>`;
     }).join('');
   }catch(e){}
 }
 
 async function refresh(){
-  const b=document.getElementById('refresh-btn');b.disabled=true;b.textContent='Refreshing...';
+  const b=document.getElementById('refresh-btn');b.disabled=true;b.textContent='刷新中...';
   await fetch('/api/refresh',{method:'POST'});
-  b.disabled=false;b.textContent='Refresh';
+  b.disabled=false;b.textContent='刷新';
 }
 
-// Init
+// 初始化
 pollState();
 loadMarket();
 loadRecommend();
