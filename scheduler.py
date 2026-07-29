@@ -8,6 +8,8 @@ import logging
 import time
 from datetime import datetime
 
+import pandas as pd
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,8 +51,10 @@ class TradingScheduler:
             today_str = today.strftime("%Y%m%d")
             trade_cal = ak.tool_trade_date_hist_sina()
             if trade_cal is not None and len(trade_cal) > 0:
-                # trade_date 列包含所有交易日
-                trade_dates = trade_cal['trade_date'].astype(str).tolist()
+                # trade_date is datetime.date objects — convert to YYYYMMDD
+                trade_dates = set(
+                    pd.to_datetime(trade_cal['trade_date']).dt.strftime('%Y%m%d')
+                )
                 return today_str in trade_dates
         except Exception as e:
             logger.debug(f"交易日历查询失败（将仅排除周末）: {e}")

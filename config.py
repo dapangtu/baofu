@@ -74,3 +74,6 @@ KLINE_DAYS_QUICK = 30             # 快速模式下获取近N日K线
 REQUEST_TIMEOUT = 15              # 请求超时（秒）
 MAX_RETRIES = 3                   # 最大重试次数
 BATCH_SLEEP = 0.15                # 批量请求间隔（秒），防封
+
+# 通达信 TCP 行情服务器（留空=使用 mootdx 自动最佳节点检测）
+TDX_SERVER = None

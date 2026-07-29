@@ -24,7 +24,7 @@ import numpy as np
 import requests
 
 from config import (
-    KLINE_DAYS, REQUEST_TIMEOUT, MAX_RETRIES, BATCH_SLEEP, DATA_DIR,
+    KLINE_DAYS, REQUEST_TIMEOUT, MAX_RETRIES, BATCH_SLEEP, DATA_DIR, TDX_SERVER,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,9 +52,15 @@ class MarketDataFetcher:
         if self._quotes_client is None:
             from mootdx.quotes import Quotes
             logger.info("Connecting to TDX server...")
-            self._quotes_client = Quotes.factory(
-                market='std', bestip=True, timeout=REQUEST_TIMEOUT
-            )
+            # Use bestip autodetect when no server configured (more reliable)
+            if TDX_SERVER:
+                self._quotes_client = Quotes.factory(
+                    market='std', server=TDX_SERVER, timeout=REQUEST_TIMEOUT
+                )
+            else:
+                self._quotes_client = Quotes.factory(
+                    market='std', timeout=REQUEST_TIMEOUT
+                )
             logger.info("TDX connected.")
         return self._quotes_client
 
@@ -66,18 +72,18 @@ class MarketDataFetcher:
         Generate known valid SZSE stock code ranges.
         SZSE Main Board: 000001-003999 (scattered among indices)
         SME: 002001-004999
-        ChiNext: 300001-301500
+        ChiNext: 300001-301999
         """
         codes = []
         # Known valid ranges (empirically determined)
-        # Main board: ~150 stocks in 000001-000999
+        # Main board: stocks in 000001-000999 and 001000-004999
         codes.extend(f"{i:06d}" for i in range(1, 1000))
         # SME board
         codes.extend(f"{i:06d}" for i in range(2001, 4001))
         # ChiNext
-        codes.extend(f"{i:06d}" for i in range(300001, 301500))
+        codes.extend(f"{i:06d}" for i in range(300001, 302000))
         # New stocks in 001xxx range
-        codes.extend(f"{i:06d}" for i in range(1000, 1500))
+        codes.extend(f"{i:06d}" for i in range(1000, 3500))
         return codes
 
     def get_stock_code_list(self) -> pd.DataFrame:
@@ -111,10 +117,21 @@ class MarketDataFetcher:
         batch_size = 80
         found_sz = []
 
+        # Use a fresh client for probing to avoid stale connection state
+        from mootdx.quotes import Quotes
+        probe_client = Quotes.factory(
+            market='std',
+            server=TDX_SERVER,
+            timeout=REQUEST_TIMEOUT,
+        ) if TDX_SERVER else Quotes.factory(
+            market='std',
+            timeout=REQUEST_TIMEOUT,
+        )
+
         for i in range(0, len(sz_candidates), batch_size):
             batch = sz_candidates[i:i + batch_size]
             try:
-                result = client.quotes(symbol=batch)
+                result = probe_client.quotes(symbol=batch)
                 if result is not None and len(result) > 0:
                     result['code'] = result['code'].astype(str).str.zfill(6)
                     active = result[(result['vol'] > 0) & (result['price'] > 0)]
