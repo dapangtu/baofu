@@ -44,8 +44,8 @@ def calc_money_flow_score(
             "score": 0.1,
             "signal": 0,
             "detail": "无资金流向数据",
-            "main_net_inflow": 0,
-            "large_net_inflow": 0,
+            "main_net_inflow": None,
+            "large_net_inflow": None,
             "large_score": 0,
         }
 

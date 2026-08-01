@@ -79,6 +79,7 @@ KLINE_DAYS_QUICK = 30             # 快速模式下获取近N日K线
 REQUEST_TIMEOUT = 15              # 请求超时（秒）
 MAX_RETRIES = 3                   # 最大重试次数
 BATCH_SLEEP = 0.15                # 批量请求间隔（秒），防封
+KLINE_CONCURRENCY = 16            # K线并发抓取线程数（每线程独立TDX连接，16并发吞吐最佳）
 
 # ============================================================
 # MySQL 数据库配置

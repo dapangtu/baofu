@@ -20,6 +20,7 @@ class MultiFactorScorer:
     def __init__(self, fetcher, concept_analyzer):
         self.fetcher = fetcher
         self.concept = concept_analyzer
+        self._money_flow_cache: Dict[str, dict] = {}
 
     # ------------------------------------------------------------------
     # Technical Scoring
@@ -71,12 +72,15 @@ class MultiFactorScorer:
     # ------------------------------------------------------------------
     def score_money_flow(self, symbol: str) -> Dict:
         """
-        Money flow scoring. If no data available, returns neutral/default score.
-        Avoids excessive API calls — only fetches when needed.
+        Money flow scoring. Uses prefetched cache if available; otherwise
+        fetches on demand (guarded by the fetcher's circuit breaker).
         """
         from indicators.money_flow import calc_money_flow_score
 
-        flow = self.fetcher.fetch_stock_money_flow(symbol)
+        if symbol in self._money_flow_cache:
+            flow = self._money_flow_cache[symbol]
+        else:
+            flow = self.fetcher.fetch_stock_money_flow(symbol)
         result = calc_money_flow_score(flow)
         return {
             "score": result["score"],
@@ -154,6 +158,38 @@ class MultiFactorScorer:
     # ------------------------------------------------------------------
     # Batch Ranking
     # ------------------------------------------------------------------
+    def _prefetch_money_flow(self, symbols: List[str], concurrency: int = 6):
+        """Concurrently prefetch money flow for candidate symbols into cache.
+
+        Fast-fails when the fetcher's circuit breaker trips (host unreachable),
+        so this adds near-zero cost when East Money is unavailable.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        to_fetch = [s for s in symbols if s not in self._money_flow_cache]
+        if not to_fetch:
+            return
+        if not self.fetcher._em_flow_available():
+            return  # breaker already open
+
+        logger.info(f"Prefetching money flow for {len(to_fetch)} stocks...")
+        done = 0
+        with ThreadPoolExecutor(max_workers=concurrency) as ex:
+            futures = {ex.submit(self.fetcher.fetch_stock_money_flow, s): s
+                       for s in to_fetch}
+            for fut in as_completed(futures):
+                sym = futures[fut]
+                try:
+                    flow = fut.result()
+                    if flow:
+                        self._money_flow_cache[sym] = flow
+                except Exception:
+                    pass
+                done += 1
+                if not self.fetcher._em_flow_available():
+                    break  # breaker tripped; cancel remaining
+        logger.info(f"Money flow prefetch done: {len(self._money_flow_cache)} cached")
+
     def rank_stocks(
         self,
         filtered_df: pd.DataFrame,
@@ -165,6 +201,10 @@ class MultiFactorScorer:
         total = len(filtered_df)
         filtered_out = 0
         logger.info(f"====== Multi-Factor Scoring ({total} stocks) ======")
+
+        # Prefetch money flow once (concurrent + circuit-breaker protected)
+        candidates = [str(c) for c in filtered_df['code'] if klines.get(str(c)) is not None]
+        self._prefetch_money_flow(candidates)
 
         for idx, (_, row) in enumerate(filtered_df.iterrows()):
             symbol = str(row.get('code', '')).strip()
