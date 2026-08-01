@@ -39,7 +39,11 @@ class Reporter:
             name = stock.get("name") or sym
             score = stock.get("total_score", 0)
 
-            print(f"  [{i+1}] {sym} {name}   Score: {score:.1f}")
+            from strategy.boards import board_label
+            board = stock.get("board", "")
+            board_txt = f" [{board_label(board)}]" if board else ""
+
+            print(f"  [{i+1}] {sym} {name}{board_txt}   Score: {score:.1f}")
             print(f"      Tech:{stock.get('tech_score',0):.0f}  "
                   f"Money:{stock.get('money_score',0):.0f}  "
                   f"Concept:{stock.get('concept_score',0):.0f}")
@@ -77,22 +81,27 @@ class Reporter:
             concept_raw = raw.get("concept", {})
             money_raw = raw.get("money", {})
 
+            from strategy.boards import board_label
+            board = stock.get("board", "")
+
             rows.append({
                 "rank": rank,
                 "symbol": stock.get("symbol", ""),
                 "name": stock.get("name", ""),
+                "board": board_label(board) if board else "",
                 "total_score": stock.get("total_score", 0),
                 "tech_score": stock.get("tech_score", 0),
                 "money_score": stock.get("money_score", 0),
                 "concept_score": stock.get("concept_score", 0),
                 "hot_concepts": "|".join(concept_raw.get("hot_concepts", [])),
                 "main_inflow_wan": money_raw.get("main_net_inflow", 0),
+                "pick_close": stock.get("pick_close"),
                 "detail": " | ".join(stock.get("detail_items", [])),
             })
 
-        fieldnames = ["rank", "symbol", "name", "total_score", "tech_score",
-                      "money_score", "concept_score", "hot_concepts",
-                      "main_inflow_wan", "detail"]
+        fieldnames = ["rank", "symbol", "name", "board", "total_score",
+                      "tech_score", "money_score", "concept_score",
+                      "hot_concepts", "main_inflow_wan", "pick_close", "detail"]
 
         try:
             with open(filepath, 'a', newline='', encoding='utf-8-sig') as f:

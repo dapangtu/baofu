@@ -3,12 +3,13 @@ Stock Selection Orchestrator — Main Controller
 
 Flow:
 1. Fetch all A-share real-time quotes
-2. Hard filter (ST/suspended/price-change/turnover/cap)
-3. Enrich finance data (market cap + turnover) + secondary filter
-4. Fetch today's hot concept sectors
-5. Batch fetch candidate K-lines
-6. Multi-factor scoring -> Top 5
-7. Output results
+2. Exclude STAR/BJ/B-share, keep main board + ChiNext only
+3. Hard filter (ST/suspended/price-change/turnover/cap)
+4. Enrich finance data (market cap + turnover) + secondary filter
+5. Fetch today's hot concept sectors
+6. Batch fetch candidate K-lines
+7. Multi-factor scoring -> Top 5 main board + Top 5 ChiNext
+8. Output results
 """
 
 import logging
@@ -18,6 +19,7 @@ from typing import List, Dict
 import pandas as pd
 
 from config import KLINE_DAYS, KLINE_DAYS_QUICK
+from strategy.boards import board_of, board_label, is_selected_board
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,16 @@ class StockSelector:
             return []
         logger.info(f"  Total market: {len(quotes_df)} stocks")
 
+        # ---- Step 1.5: Exclude STAR/BJ/B-share, keep main + ChiNext ----
+        quotes_df = quotes_df.copy()
+        codes_series = quotes_df['code'].astype(str).str.zfill(6)
+        quotes_df['board'] = codes_series.map(board_of)
+        board_counts = quotes_df['board'].value_counts()
+        logger.info(f"  Board distribution: {dict(board_counts)}")
+        quotes_df = quotes_df[quotes_df['board'].map(is_selected_board)]
+        quotes_df = quotes_df.reset_index(drop=True)
+        logger.info(f"  After board filter (main+ChiNext): {len(quotes_df)} stocks")
+
         # ---- Step 2: Hard filter ----
         logger.info("[2/7] Applying hard filters...")
         from strategy.filter import apply_all_filters
@@ -114,18 +126,41 @@ class StockSelector:
 
         # ---- Step 7: Output ----
         logger.info("[7/7] Generating report...")
-        top_n = min(5, len(ranked))
 
-        # Concept diversity: avoid Top 5 all from same concept
-        top_stocks = self._ensure_concept_diversity(ranked[:20], top_n)
+        # Split ranked into main board (incl. ChiNext=excluded) and ChiNext
+        main_ranked = [s for s in ranked if board_of(s["symbol"]) != 'chinext']
+        cy_ranked = [s for s in ranked if board_of(s["symbol"]) == 'chinext']
+        logger.info(f"  Scored: main board {len(main_ranked)}, ChiNext {len(cy_ranked)}")
+
+        main_top = self._ensure_concept_diversity(main_ranked[:20], 5)
+        cy_top = self._ensure_concept_diversity(cy_ranked[:20], 5)
+
+        # Tag each pick with its board + pick-day close price
+        for s in main_top + cy_top:
+            s["board"] = board_of(s["symbol"])
+            kline = klines.get(s["symbol"])
+            if kline is not None and 'close' in kline.columns and len(kline) > 0:
+                s["pick_close"] = round(float(kline['close'].iloc[-1]), 2)
+            else:
+                s["pick_close"] = None
+
+        top_stocks = main_top + cy_top
 
         from output.reporter import Reporter
         reporter = Reporter()
         reporter.print_formatted(top_stocks)
         reporter.save_to_csv(top_stocks)
 
+        # Persist to MySQL (best-effort, non-fatal)
+        try:
+            from db import save_picks
+            save_picks(top_stocks)
+        except Exception as e:
+            logger.error(f"MySQL save failed: {e}")
+
         elapsed = time.time() - start_time
-        logger.info(f"\nSelection complete. Time elapsed: {elapsed:.1f}s")
+        logger.info(f"\nSelection complete. Time elapsed: {elapsed:.1f}s "
+                    f"(main: {len(main_top)}, ChiNext: {len(cy_top)})")
         return top_stocks
 
     def run_quick(self) -> List[Dict]:
