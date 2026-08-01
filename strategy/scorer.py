@@ -159,8 +159,11 @@ class MultiFactorScorer:
         filtered_df: pd.DataFrame,
         klines: Dict[str, pd.DataFrame],
     ) -> List[Dict]:
+        from config import LARGE_ORDER_MIN_NET
+
         results = []
         total = len(filtered_df)
+        filtered_out = 0
         logger.info(f"====== Multi-Factor Scoring ({total} stocks) ======")
 
         for idx, (_, row) in enumerate(filtered_df.iterrows()):
@@ -171,10 +174,23 @@ class MultiFactorScorer:
                 continue
 
             result = self.compute_total_score(symbol, kline, row)
+
+            # ---- Hard filter: 大单净量 ----
+            # Skip if large-order net inflow is below threshold (when data exists).
+            # Missing data passes through to avoid over-filtering on API failures.
+            money_raw = (result.get("raw_indicators") or {}).get("money", {}) or {}
+            large_w = money_raw.get("large_net_inflow", None)
+            if large_w is not None and large_w < LARGE_ORDER_MIN_NET:
+                filtered_out += 1
+                continue
+
             results.append(result)
 
             if (idx + 1) % 50 == 0:
                 logger.info(f"  Scoring: {idx+1}/{total}")
+
+        if filtered_out:
+            logger.info(f"  Filtered by 大单净量 (<{LARGE_ORDER_MIN_NET}万): {filtered_out}")
 
         results.sort(key=lambda x: x["total_score"], reverse=True)
 

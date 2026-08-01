@@ -41,43 +41,62 @@ def _summarize_signals(tech_raw):
 _price_cache = {}
 _price_cache_ts = {}
 
-def _lookup_price(symbol):
+def _lookup_prices(symbols):
     """
-    Get latest price for a symbol. Uses a 60s cache to avoid hammering TDX.
-    Returns (price, prev_close, trade_date_str) or (None, None, "").
+    Batch latest-price lookup for many symbols in a single TDX quotes call.
+    Returns dict: {symbol: (price, prev_close)}. Uses a 60s cache.
     """
     now = time.time()
-    if symbol in _price_cache_ts and now - _price_cache_ts[symbol] < 60:
-        return _price_cache[symbol]
+    out = {}
+    to_fetch = []
+    for sym in symbols:
+        if sym in _price_cache_ts and now - _price_cache_ts[sym] < 60:
+            out[sym] = (_price_cache[sym][0], _price_cache[sym][1])
+        else:
+            to_fetch.append(sym)
 
-    price = prev = date_str = None
-    try:
-        fetcher = get_fetcher()
-        client = fetcher._get_quotes_client()
-        q = client.quotes(symbol=[symbol])
-        if q is not None and len(q) > 0:
-            row = q.iloc[0]
-            p = float(row.get("price", 0) or 0)
-            pc = float(row.get("last_close", 0) or 0)
-            if p > 0:
-                price = p
-                prev = pc if pc > 0 else None
-    except Exception:
-        pass
-
-    if price is None:
-        # Fallback: latest daily K-line close
+    if to_fetch:
+        fetched = {}
         try:
-            k = get_fetcher().fetch_daily_kline(symbol, days=5)
-            if k is not None and len(k) > 0:
-                price = float(k['close'].iloc[-1])
+            client = get_fetcher()._get_quotes_client()
+            # quotes() caps around 80 per call
+            for i in range(0, len(to_fetch), 80):
+                batch = to_fetch[i:i + 80]
+                q = client.quotes(symbol=batch)
+                if q is not None and len(q) > 0:
+                    for _, row in q.iterrows():
+                        code = str(row.get("code", "")).zfill(6)
+                        p = float(row.get("price", 0) or 0)
+                        pc = float(row.get("last_close", 0) or 0)
+                        if p > 0:
+                            fetched[code] = (p, pc if pc > 0 else None)
         except Exception:
             pass
 
-    if price is not None:
-        _price_cache[symbol] = (price, prev, "")
-        _price_cache_ts[symbol] = now
-    return (price, prev, "")
+        # Fallback: K-line close for symbols TDX quotes missed
+        for sym in to_fetch:
+            if sym in fetched:
+                continue
+            try:
+                k = get_fetcher().fetch_daily_kline(sym, days=5)
+                if k is not None and len(k) > 0:
+                    fetched[sym] = (float(k['close'].iloc[-1]), None)
+            except Exception:
+                pass
+
+        for sym, val in fetched.items():
+            _price_cache[sym] = val + ("",)
+            _price_cache_ts[sym] = now
+            out[sym] = (val[0], val[1])
+
+    return out
+
+
+def _lookup_price(symbol):
+    """Single-symbol wrapper around batch lookup."""
+    res = _lookup_prices([symbol])
+    val = res.get(symbol, (None, None))
+    return (val[0], val[1], "")
 
 
 def _calc_return(pick_close, cur_price, cur_prev):
@@ -148,12 +167,9 @@ def api_picks():
     except Exception as e:
         return jsonify({"stocks": [], "dates": [], "error": f"query: {e}"})
 
-    # Batch price lookup for unique symbols
-    symbols = sorted({str(r["symbol"]) for r in rows})
-    prices = {}
-    for sym in symbols:
-        price, prev, _ = _lookup_price(sym)
-        prices[sym] = (price, prev)
+    # Batch price lookup for unique symbols (single TDX quotes call)
+    symbols = sorted({str(r["symbol"]).zfill(6) for r in rows})
+    prices = _lookup_prices(symbols)
 
     stocks = []
     for r in rows:
@@ -171,6 +187,10 @@ def api_picks():
             "concept_score": round(float(r.get("concept_score", 0)), 0),
             "hot_concepts": (r.get("hot_concepts") or "").split("|"),
             "pick_close": pc,
+            "main_inflow_wan": (round(float(r["main_inflow_wan"]), 0)
+                                if r.get("main_inflow_wan") is not None else None),
+            "large_inflow_wan": (round(float(r["large_inflow_wan"]), 0)
+                                 if r.get("large_inflow_wan") is not None else None),
             "cur_price": round(price, 2) if price else None,
             "day_change_pct": (round((price - prev) / prev * 100, 2)
                                if price and prev else None),

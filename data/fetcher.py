@@ -404,7 +404,14 @@ class MarketDataFetcher:
     # Money Flow (East Money API — per stock, use sparingly)
     # ------------------------------------------------------------------
     def fetch_stock_money_flow(self, symbol: str) -> Optional[dict]:
-        """Fetch money flow for a single stock."""
+        """
+        Fetch money flow for a single stock.
+
+        East Money fflow daykline fields (f51..f56):
+            f51=日期, f52=主力净流入, f53=小单, f54=中单,
+            f55=大单净量(大单净流入), f56=超大单
+        主力净流入 = 超大单 + 大单 (f52, 服务端已算好).
+        """
         mc = "1" if symbol.startswith(("6", "68")) else "0"
         secid = f"{mc}.{symbol}"
         params = {
@@ -420,9 +427,15 @@ class MarketDataFetcher:
                 data = r.json()
                 if data.get("data") and data["data"].get("klines"):
                     parts = data["data"]["klines"][-1].split(",")
-                    sl = float(parts[3]) if len(parts) > 3 else 0
-                    lg = float(parts[4]) if len(parts) > 4 else 0
-                    return {"main_net_inflow": sl + lg, "super_large_net": sl, "large_net": lg}
+                    main = float(parts[1]) if len(parts) > 1 else 0
+                    large = float(parts[4]) if len(parts) > 4 else 0  # f55 大单净量
+                    super_large = float(parts[5]) if len(parts) > 5 else 0
+                    return {
+                        "main_net_inflow": main,
+                        "large_net_inflow": large,
+                        "super_large_net": super_large,
+                        "large_net": large,
+                    }
         except Exception:
             pass
         return None

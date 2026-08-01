@@ -95,13 +95,15 @@ class Reporter:
                 "concept_score": stock.get("concept_score", 0),
                 "hot_concepts": "|".join(concept_raw.get("hot_concepts", [])),
                 "main_inflow_wan": money_raw.get("main_net_inflow", 0),
+                "large_inflow_wan": money_raw.get("large_net_inflow", 0),
                 "pick_close": stock.get("pick_close"),
                 "detail": " | ".join(stock.get("detail_items", [])),
             })
 
         fieldnames = ["rank", "symbol", "name", "board", "total_score",
                       "tech_score", "money_score", "concept_score",
-                      "hot_concepts", "main_inflow_wan", "pick_close", "detail"]
+                      "hot_concepts", "main_inflow_wan", "large_inflow_wan",
+                      "pick_close", "detail"]
 
         try:
             with open(filepath, 'a', newline='', encoding='utf-8-sig') as f:
